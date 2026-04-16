@@ -1,0 +1,29 @@
+[scan]
+supported_extensions = [
+  "jpg",
+  "jpeg",
+  "png",
+  "tif",
+  "tiff",
+  "nef",
+  "cr2",
+  "cr3",
+  "arw",
+  "dng",
+  "webp"
+]
+
+[analysis]
+default_profile = "balanced"
+
+[analysis.categories]
+general = { sharpness_weight = 1.0, exposure_weight = 1.0, contrast_weight = 1.0, noise_weight = 1.0 }
+portrait = { sharpness_weight = 1.2, exposure_weight = 1.1, contrast_weight = 0.9, noise_weight = 1.0 }
+bird = { sharpness_weight = 1.4, exposure_weight = 1.0, contrast_weight = 1.0, noise_weight = 0.9 }
+wildlife = { sharpness_weight = 1.3, exposure_weight = 1.0, contrast_weight = 1.0, noise_weight = 0.9 }
+landscape = { sharpness_weight = 1.0, exposure_weight = 1.2, contrast_weight = 1.1, noise_weight = 1.0 }
+sky = { sharpness_weight = 0.8, exposure_weight = 1.2, contrast_weight = 1.1, noise_weight = 1.0 }
+aerial = { sharpness_weight = 1.1, exposure_weight = 1.0, contrast_weight = 1.0, noise_weight = 1.0 }
+product = { sharpness_weight = 1.3, exposure_weight = 1.0, contrast_weight = 1.1, noise_weight = 1.0 }
+macro = { sharpness_weight = 1.5, exposure_weight = 1.0, contrast_weight = 1.0, noise_weight = 0.9 }
+
