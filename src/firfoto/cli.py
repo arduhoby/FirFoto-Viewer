@@ -84,14 +84,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print configuration as JSON.",
     )
 
-    gui_parser = subparsers.add_parser("gui", help="Open the simple preview GUI.")
-    gui_parser.add_argument(
-        "folder",
-        nargs="?",
-        type=Path,
-        default=None,
-        help="Optional folder to load at startup.",
-    )
 
     metadata_parser = subparsers.add_parser("metadata", help="Inspect a single photo file and print metadata.")
     metadata_parser.add_argument("path", type=Path, help="Photo file path.")
@@ -371,8 +363,8 @@ def _cmd_render_preview(args: argparse.Namespace, _config: AppConfig) -> int:
     )
     frame = load_preview_frame(args.path, max_size=(args.max_width, args.max_height))
     metadata = collect_basic_metadata(metadata_source)
-    image_width = frame.image.width() if frame.image is not None else None
-    image_height = frame.image.height() if frame.image is not None else None
+    image_width = frame.width
+    image_height = frame.height
     mean_luma = None
     suggested_exposure_ev = None
     try:
@@ -662,14 +654,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_tags_delete(args, config)
     if args.command == "analyze-stream":
         return _cmd_analyze_stream(args, config)
-    if args.command == "gui":
-        from firfoto.gui import launch_gui
-
-        try:
-            return launch_gui(config_path=args.config, initial_folder=args.folder)
-        except RuntimeError as exc:
-            print(str(exc))
-            return 1
 
     parser.error(f"Unknown command: {args.command}")
     return 2

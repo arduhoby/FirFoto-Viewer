@@ -1,4 +1,4 @@
-"""Preview image loading helpers for the Qt viewer."""
+"""Preview image loading helpers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image, ImageOps
-from PySide6.QtGui import QImage
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
+
+try:
+    import pillow_avif
+except ImportError:
+    pass
 
 try:  # pragma: no cover - depends on local environment
     import rawpy
@@ -19,20 +29,44 @@ RAW_SUFFIXES = {
     ".arw",
     ".cr2",
     ".cr3",
+    ".dcr",
     ".dng",
     ".erf",
+    ".fff",
+    ".gpr",
+    ".iiq",
+    ".kdc",
     ".mef",
+    ".mos",
+    ".mrw",
     ".nef",
     ".nrw",
     ".orf",
     ".pef",
+    ".ptx",
     ".raf",
     ".rw2",
+    ".rwl",
     ".sr2",
+    ".srf",
     ".srw",
+    ".x3f",
 }
 
-SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+SUPPORTED_IMAGE_SUFFIXES = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+    ".heic",
+    ".heif",
+    ".avif",
+    ".gif",
+}
+
+VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv"}
 
 
 @dataclass(slots=True)
@@ -66,21 +100,23 @@ class FocusRect:
 
 @dataclass(slots=True)
 class PreviewFrame:
-    image: QImage | None
+    image: Image.Image | None
     focus_point: FocusPoint | None = None
     error: str | None = None
+
+    @property
+    def width(self) -> int | None:
+        return self.image.width if self.image else None
+
+    @property
+    def height(self) -> int | None:
+        return self.image.height if self.image else None
 
 
 def is_raw_file(path: Path) -> bool:
     return path.suffix.lower() in RAW_SUFFIXES
 
 
-def _pil_to_qimage(image: Image.Image) -> QImage:
-    rgb = image.convert("RGB")
-    width, height = rgb.size
-    data = rgb.tobytes("raw", "RGB")
-    qimage = QImage(data, width, height, width * 3, QImage.Format.Format_RGB888)
-    return qimage.copy()
 
 
 def _laplacian_variance(image: Image.Image) -> float:
@@ -402,14 +438,7 @@ def load_preview_frame(path: Path, *, max_size: tuple[int, int] = (1600, 1200)) 
     if image is None:
         return PreviewFrame(image=None, error=error)
     boxes = _build_sharpness_boxes(image)
-    return PreviewFrame(image=_pil_to_qimage(image), focus_point=_pick_focus_point(boxes))
-
-
-def load_preview_qimage(path: Path, *, max_size: tuple[int, int] = (1600, 1200)) -> tuple[QImage | None, str | None]:
-    """Load a previewable image or RAW file as a QImage."""
-
-    frame = load_preview_frame(path, max_size=max_size)
-    return frame.image, frame.error
+    return PreviewFrame(image=image, focus_point=_pick_focus_point(boxes))
 
 
 def export_preview_image(

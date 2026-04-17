@@ -47,6 +47,7 @@ class BasicMetadata:
     af_area_y: int | None = None
     af_area_width: int | None = None
     af_area_height: int | None = None
+    duration_s: float | None = None
     category_hint: PhotoCategory = PhotoCategory.GENERAL
     notes: list[str] = field(default_factory=list)
 
@@ -194,98 +195,88 @@ def _tag_values(tag: Any) -> list[Any]:
         return []
 
 
-def _nikon_153_point_label(index: int) -> str | None:
-    if index <= 0:
-        return None
-    columns = ["E", "D", "C", "B", "A", "F", "G", "H", "I"]
-    row_order = [9, 10, 11, 8, 7, 12, 13, 14, 15, 6, 5, 4, 3, 2, 1, 16, 17]
-    position = index - 1
-    row_index = position // len(columns)
-    column_index = position % len(columns)
-    if row_index < 0 or row_index >= len(row_order):
-        return None
-    return f"{columns[column_index]}{row_order[row_index]}"
-
-
-def _extract_nikon_focus_point(tags: dict[str, Any], camera_model: str | None) -> tuple[int | None, str | None, str | None, str | None, str | None]:
+def _extract_nikon_info(tags: dict[str, Any], camera: CameraIdentity) -> dict[str, Any]:
+    """Extract Nikon specific MakerNote information."""
     af_info = tags.get("MakerNote AFInfo2")
     values = _tag_values(af_info)
-    if len(values) < 69:
-        return None, None, None, None, None
+    results: dict[str, Any] = {}
 
-    raw_version = "".join(chr(int(value)) for value in values[:4] if isinstance(value, int) and 32 <= int(value) <= 126)
-    af_detection_method = {
-        0: "Phase Detect",
-        1: "Contrast Detect",
-        2: "Hybrid",
-    }.get(int(values[4]) if len(values) > 4 and isinstance(values[4], int) else -1)
-    af_area_mode = {
-        0: "Single Area",
-        1: "Dynamic Area",
-        2: "Dynamic Area (closest subject)",
-        3: "Group Dynamic",
-        4: "Dynamic Area (9 points)",
-        5: "Dynamic Area (21 points)",
-        6: "Dynamic Area (51 points)",
-        7: "Dynamic Area (51 points, 3D-tracking)",
-        8: "Auto-area",
-        9: "Dynamic Area (3D-tracking)",
-        10: "Single Area (wide)",
-        11: "Dynamic Area (wide)",
-        12: "Dynamic Area (wide, 3D-tracking)",
-        13: "Group Area",
-        14: "Dynamic Area (25 points)",
-        15: "Dynamic Area (72 points)",
-        16: "Group Area (HL)",
-        17: "Group Area (VL)",
-        18: "Dynamic Area (49 points)",
-        128: "Single",
-        129: "Auto (41 points)",
-        130: "Subject Tracking (41 points)",
-        131: "Face Priority (41 points)",
-        192: "Pinpoint",
-        193: "Single",
-        194: "Dynamic",
-        195: "Wide (S)",
-        196: "Wide (L)",
-        197: "Auto",
-        198: "Auto (People)",
-        199: "Auto (Animal)",
-        200: "Normal-area AF",
-        201: "Wide-area AF",
-        202: "Face-priority AF",
-        203: "Subject-tracking AF",
-        204: "Dynamic Area (S)",
-        205: "Dynamic Area (M)",
-        206: "Dynamic Area (L)",
-        207: "3D-tracking",
-        208: "Wide-Area (C1/C2)",
-    }.get(int(values[5]) if len(values) > 5 and isinstance(values[5], int) else -1)
+    if len(values) >= 69:
+        results["af_info_version"] = "".join(chr(int(value)) for value in values[:4] if isinstance(value, int) and 32 <= int(value) <= 126)
+        results["af_detection_method"] = {
+            0: "Phase Detect", 1: "Contrast Detect", 2: "Hybrid",
+        }.get(int(values[4]) if len(values) > 4 and isinstance(values[4], int) else -1)
+        results["af_area_mode"] = {
+            0: "Single Area", 1: "Dynamic Area", 2: "Dynamic Area (closest subject)",
+            3: "Group Dynamic", 4: "Dynamic Area (9 points)", 5: "Dynamic Area (21 points)",
+            6: "Dynamic Area (51 points)", 7: "Dynamic Area (51 points, 3D-tracking)",
+            8: "Auto-area", 9: "Dynamic Area (3D-tracking)", 13: "Group Area",
+            14: "Dynamic Area (25 points)", 15: "Dynamic Area (72 points)",
+            16: "Group Area (HL)", 17: "Group Area (VL)", 18: "Dynamic Area (49 points)",
+            128: "Single", 129: "Auto (41 points)", 192: "Pinpoint",
+            193: "Single", 195: "Wide (S)", 196: "Wide (L)", 197: "Auto",
+            201: "Wide-area AF", 204: "Dynamic Area (S)", 207: "3D-tracking",
+        }.get(int(values[5]) if len(values) > 5 and isinstance(values[5], int) else -1)
 
-    af_point_index = int(values[68]) if len(values) > 68 and isinstance(values[68], int) else None
-    af_point_label = None
-    if af_point_index is not None:
-        if camera_model and camera_model.upper() in {"NIKON D5", "NIKON D500", "NIKON D850"}:
-            af_point_label = _nikon_153_point_label(af_point_index)
-        elif camera_model and camera_model.upper() in {"NIKON D3400", "NIKON D3500"}:
-            af_point_label = {
-                0: None,
-                1: "Center",
-                2: "Top",
-                3: "Bottom",
-                4: "Mid-left",
-                5: "Upper-left",
-                6: "Lower-left",
-                7: "Far Left",
-                8: "Mid-right",
-                9: "Upper-right",
-                10: "Lower-right",
-                11: "Far Right",
-            }.get(af_point_index)
-        else:
-            af_point_label = str(af_point_index)
+        af_point_index = int(values[68]) if len(values) > 68 and isinstance(values[68], int) else None
+        results["af_point_index"] = af_point_index
+        if af_point_index is not None:
+            if camera.model and camera.model.upper() in {"NIKON D5", "NIKON D500", "NIKON D850"}:
+                results["af_point_label"] = _nikon_153_point_label(af_point_index)
+            else:
+                results["af_point_label"] = str(af_point_index)
+    return results
 
-    return af_point_index, af_point_label, raw_version or None, af_detection_method, af_area_mode
+
+def _extract_fujifilm_info(tags: dict[str, Any]) -> dict[str, Any]:
+    """Extract Fujifilm specific MakerNote information."""
+    results: dict[str, Any] = {}
+    
+    # Lens Info
+    lens_model = _normalize_text(tags.get("MakerNote LensModel") or tags.get("MakerNote LensInfo"))
+    if lens_model:
+        results["lens_model"] = lens_model
+
+    # Focus Info
+    focus_mode = _normalize_text(tags.get("MakerNote FocusMode"))
+    if focus_mode:
+        results["af_detection_method"] = focus_mode
+    
+    af_area_mode = _normalize_text(tags.get("MakerNote AFMode"))
+    if af_area_mode:
+        results["af_area_mode"] = af_area_mode
+
+    # Some Fuji models store focus point in MakerNote FocusPixel
+    focus_pixel = tags.get("MakerNote FocusPixel")
+    if focus_pixel:
+        values = _tag_values(focus_pixel)
+        if len(values) >= 2:
+            results["af_area_x"] = int(values[0])
+            results["af_area_y"] = int(values[1])
+            results["af_point_label"] = "Active Area"
+
+    return results
+
+
+def _extract_canon_info(tags: dict[str, Any]) -> dict[str, Any]:
+    """Extract Canon specific MakerNote information."""
+    results: dict[str, Any] = {}
+    
+    # Higher quality lens name often in these tags
+    lens_model = _normalize_text(tags.get("MakerNote LensModel") or tags.get("EXIF LensModel"))
+    if lens_model:
+        results["lens_model"] = lens_model
+
+    focus_mode = _normalize_text(tags.get("MakerNote FocusMode"))
+    if focus_mode:
+        results["af_detection_method"] = focus_mode
+
+    # Canon AF Point mapping can be very complex, adding basic support
+    af_point = tags.get("MakerNote AFPointsInFocus")
+    if af_point:
+        results["af_point_label"] = f"AF Point {af_point}"
+
+    return results
 
 
 def _extract_subject_area(tags: dict[str, Any]) -> tuple[int | None, int | None, int | None, int | None]:
@@ -348,20 +339,26 @@ def _extract_brand_focus_hint(
     return label, detection_method, area_mode
 
 
-def _extract_sony_focus_point(tags: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+def _extract_sony_info(tags: dict[str, Any]) -> dict[str, Any]:
+    """Extract Sony specific MakerNote information."""
+    results: dict[str, Any] = {}
+    
     detection_method = _normalize_text(tags.get("MakerNote FocusMode"))
     if detection_method == "Unknown":
         detection_method = None
+    results["af_detection_method"] = detection_method
 
     area_mode = _normalize_text(tags.get("MakerNote AFAreaMode"))
     if area_mode == "Unknown":
         area_mode = None
+    results["af_area_mode"] = area_mode
 
-    if detection_method and detection_method.lower() == "manual":
-        return None, detection_method, area_mode
+    label, fallback_dm, fallback_am = _extract_brand_focus_hint(tags, "sony")
+    results["af_point_label"] = label
+    if not results["af_detection_method"]: results["af_detection_method"] = fallback_dm
+    if not results["af_area_mode"]: results["af_area_mode"] = fallback_am
 
-    label, fallback_detection, fallback_area_mode = _extract_brand_focus_hint(tags, "sony")
-    return label, detection_method or fallback_detection, area_mode or fallback_area_mode
+    return results
 
 
 def _extract_nikon_lens_identity(
@@ -424,6 +421,49 @@ def _extract_nikon_lens_identity(
     return lens, notes
 
 
+def _extract_video_info(path: Path) -> dict[str, Any]:
+    """Use ffprobe to extract video resolution and duration."""
+    import subprocess
+    import json
+    
+    results: dict[str, Any] = {}
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "quiet",
+            "-print_format", "json",
+            "-show_streams",
+            "-show_format",
+            str(path),
+        ]
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        data = json.loads(output)
+        
+        # Get duration
+        format_data = data.get("format", {})
+        results["duration_s"] = _parse_fraction(format_data.get("duration"))
+        
+        # Get video stream info
+        for stream in data.get("streams", []):
+            if stream.get("codec_type") == "video":
+                results["width"] = _parse_int(stream.get("width"))
+                results["height"] = _parse_int(stream.get("height"))
+                break
+    except Exception:
+        pass  # Fallback to defaults
+    return results
+
+
+def _extract_generic_info(tags: dict[str, Any]) -> dict[str, Any]:
+    """Generic fallback for MakerNote extraction."""
+    results: dict[str, Any] = {}
+    label, dm, am = _extract_brand_focus_hint(tags, None)
+    results["af_point_label"] = label
+    results["af_detection_method"] = dm
+    results["af_area_mode"] = am
+    return results
+
+
 def infer_category_from_path(path: Path) -> PhotoCategory:
     tokens = " ".join(path.parts).lower()
     mapping = {
@@ -461,7 +501,23 @@ def collect_basic_metadata(path: Path) -> BasicMetadata:
     af_area_y: int | None = None
     af_area_width: int | None = None
     af_area_height: int | None = None
+    duration_s: float | None = None
     notes: list[str] = []
+
+    suffix_lower = path.suffix.lower()
+    from firfoto.gui.image_loader import VIDEO_SUFFIXES
+    if suffix_lower in VIDEO_SUFFIXES:
+        video_info = _extract_video_info(path)
+        return BasicMetadata(
+            path=path,
+            size_bytes=stat.st_size,
+            suffix=suffix_lower,
+            width=video_info.get("width"),
+            height=video_info.get("height"),
+            duration_s=video_info.get("duration_s"),
+            category_hint=PhotoCategory.GENERAL,
+            notes=["Video file metadata extracted via ffprobe."],
+        )
 
     try:
         width, height, camera, lens = _read_pillow_metadata(path)
@@ -500,19 +556,43 @@ def collect_basic_metadata(path: Path) -> BasicMetadata:
                 or tags.get("EXIF PhotographicSensitivity")
                 or tags.get("Image ISOSpeedRatings")
             )
-        af_point_index, af_point_label, af_info_version, af_detection_method, af_area_mode = _extract_nikon_focus_point(tags, camera.model)
-        af_area_x, af_area_y, af_area_width, af_area_height = _extract_subject_area(tags)
-        maker = (camera.maker or "").strip().lower()
-        if "sony" in maker:
-            sony_label, sony_detection_method, sony_area_mode = _extract_sony_focus_point(tags)
-            af_point_label = af_point_label or sony_label
-            af_detection_method = af_detection_method or sony_detection_method
-            af_area_mode = af_area_mode or sony_area_mode
+        # Brand-Specific Fine-tuning
+        maker_lower = (camera.maker or "").lower()
+        brand_data: dict[str, Any] = {}
+        if "nikon" in maker_lower:
+            brand_data = _extract_nikon_info(tags, camera)
+        elif "fuji" in maker_lower:
+            brand_data = _extract_fujifilm_info(tags)
+        elif "canon" in maker_lower:
+            brand_data = _extract_canon_info(tags)
+        elif "sony" in maker_lower:
+            brand_data = _extract_sony_info(tags)
+        else:
+            brand_data = _extract_generic_info(tags)
+
+        # Merge Brand Data
+        if brand_data.get("lens_model"):
+            lens.model = brand_data["lens_model"]
+        af_point_index = brand_data.get("af_point_index", af_point_index)
+        af_point_label = brand_data.get("af_point_label", af_point_label)
+        af_info_version = brand_data.get("af_info_version", af_info_version)
+        af_detection_method = brand_data.get("af_detection_method", af_detection_method)
+        af_area_mode = brand_data.get("af_area_mode", af_area_mode)
+        af_area_x = brand_data.get("af_area_x", af_area_x)
+        af_area_y = brand_data.get("af_area_y", af_area_y)
+
+        af_area_x_sub, af_area_y_sub, af_area_w_sub, af_area_h_sub = _extract_subject_area(tags)
+        af_area_x = af_area_x or af_area_x_sub
+        af_area_y = af_area_y or af_area_y_sub
+        af_area_width = af_area_w_sub
+        af_area_height = af_area_h_sub
+
         if af_point_label is None:
-            af_point_label, fallback_detection_method, fallback_area_mode = _extract_brand_focus_hint(tags, camera.maker)
-            af_detection_method = af_detection_method or fallback_detection_method
-            af_area_mode = af_area_mode or fallback_area_mode
-        if af_point_label is not None:
+            af_point_label, fb_dm, fb_am = _extract_brand_focus_hint(tags, camera.maker)
+            af_detection_method = af_detection_method or fb_dm
+            af_area_mode = af_area_mode or fb_am
+
+        if af_point_label:
             notes.append(f"AF point: {af_point_label}")
         elif af_area_x is not None and af_area_y is not None:
             notes.append("AF area coordinates available.")
